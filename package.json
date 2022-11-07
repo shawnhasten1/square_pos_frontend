@@ -9,6 +9,9 @@
   },
   "dependencies": {
     "core-js": "^3.8.3",
+    "square": "^23.0.0",
+    "stream": "^0.0.2",
+    "stream-browserify": "^3.0.0",
     "vue": "^3.2.13"
   },
   "devDependencies": {

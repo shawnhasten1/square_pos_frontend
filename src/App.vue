@@ -1,26 +1,305 @@
 <template>
-  <img alt="Vue logo" src="./assets/logo.png">
-  <HelloWorld msg="Welcome to Your Vue.js App"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400&display=swap" rel="stylesheet">
+  <div id="container">
+    <div id="categories">
+      <div class="titles">
+        <h3>Categories</h3>
+      </div>
+      <ul class="list">
+        <li class="list_item" v-for="category in categories" :key="category" @click="refreshPriceKeys(category.id)" :class="{ active: category.id==category_id }">{{category.name}}</li>
+      </ul>
+    </div>
+    <div id="pos_body">
+      <div id="key_body" v-if="keys.length > 0 && !loading">
+        <div class="pos_key" v-for="key in keys" :key="key" @click="getPriceKey(key.id)">
+          <div class="key_image_holder">
+            <img v-if="key.image_data.url" class="key_image" width="100%" v-bind:src="key.image_data.url"/>
+            <img v-else class="key_image" width="100%" src="./assets/logo.png"/>
+          </div>
+          <div class="key_description">
+            {{key.name}}<br/>${{formatMoney(key.price.amount/100)}}
+          </div>
+        </div>
+      </div>
+      <div id="key_body" v-else-if="loading">
+        <h3 style="opacity: .5;">Loading...</h3>
+      </div>
+      <div id="key_body_nothing" v-else-if="!loading">
+        <img class="nothing_image" width="100%" src="./assets/logo.png"/>
+        <h3 style="text-align:center; opacity: .3;">Nothing Here</h3>
+      </div>
+    </div>
+    <div id="receipt_body">
+      <div class="titles">
+        <h3>Current Sale</h3>
+      </div>
+      <ul class="receipt">
+        <li class="line_item" v-for="item in receipt.items" :key="item">
+          <span style="display:inline-block">{{item.item_data.name}}</span>
+          <span style="display:inline-block; float: right;">${{formatMoney(item.item_data.variations[0].item_variation_data.price_money.amount/100)}}</span>
+        </li>
+      </ul>
+      <div class="line_item">
+          <span style="display:inline-block">Discounts</span>
+          <span style="display:inline-block; float: right;">${{formatMoney(this.receipt.discount/100)}}</span>
+      </div>
+      <div class="line_item">
+          <span style="display:inline-block">Tax</span>
+          <span style="display:inline-block; float: right;">${{formatMoney(this.receipt.tax/100)}}</span>
+      </div>
+      <div class="charge_btn" @click="charge()">
+        <div class="line_item">Charge ${{formatMoney(this.receipt.total/100)}}</div>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script>
-import HelloWorld from './components/HelloWorld.vue'
+
+import axios from 'axios'
 
 export default {
   name: 'App',
-  components: {
-    HelloWorld
+  data: function(){
+    return {
+        categories:[],
+        keys:[],
+        receipt:{
+          total:0,
+          discount:0,
+          tax:0,
+          items:[]
+        },
+        category_id:null,
+        loading:false
+      }
+  },
+  methods:{
+    refreshCategories: function(){
+      this.categories = []
+      axios.get("http://localhost:5000/v1/categories")
+        .then(response => {
+          console.log(response.data);
+          this.categories = response.data
+        })
+    },
+    refreshPriceKeys: function(cat_id){
+      this.keys = []
+      this.category_id = cat_id
+      this.loading = true
+      axios.get("http://localhost:5000/v1/categories/"+this.category_id+"/items")
+        .then(response => {
+          console.log(response.data);
+          this.keys = response.data
+          this.loading = false
+        })
+    },
+    getPriceKey: function(key_id){
+      axios.get("http://localhost:5000/v1/items/"+key_id)
+      .then(response => {
+        console.log(response.data);
+        this.receipt.items.push(response.data);
+        
+        this.receipt.total = 0;
+        this.receipt.tax = 0;
+        for(var i = 0; i<this.receipt.items.length; i++){
+          this.receipt.total+=this.receipt.items[i].item_data.variations[0].item_variation_data.price_money.amount;
+        }
+        this.receipt.tax = this.receipt.total*.065;
+        this.receipt.total += this.receipt.tax;
+      })
+    },
+    charge: function(){
+      var receipt_obj = {
+        "order": {
+          "location_id": "L75ER37CRBXNX",
+          "line_items": []
+        },
+        "idempotency_key": "42ab6d1b-0b08-4f69-b97d-945936185197"
+      }
+      for(var i = 0; i<this.receipt.items.length; i++){
+        receipt_obj.order.line_items.push({
+          "quantity": "1",
+          "catalog_object_id": this.receipt.items[i].item_data.variations[0].id,
+          "item_type": "ITEM"
+        })
+      }
+      console.log(receipt_obj)
+    },
+    formatMoney: function(amount, decimalCount = 2, decimal = ".", thousands = ",") {
+        try {
+            decimalCount = Math.abs(decimalCount);
+            decimalCount = isNaN(decimalCount) ? 2 : decimalCount;
+
+            const negativeSign = amount < 0 ? "-" : "";
+
+            let i = parseInt(amount = Math.abs(Number(amount) || 0).toFixed(decimalCount)).toString();
+            let j = (i.length > 3) ? i.length % 3 : 0;
+
+            return negativeSign + (j ? i.substr(0, j) + thousands : '') + i.substr(j).replace(/(\d{3})(?=\d)/g, "$1" + thousands) + (decimalCount ? decimal + Math.abs(amount - i).toFixed(decimalCount).slice(2) : "");
+        } catch (e) {
+            //console.log(e)
+        }
+    }
+  },
+  mounted() {
+    this.refreshCategories()
   }
 }
+
 </script>
 
 <style>
-#app {
-  font-family: Avenir, Helvetica, Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-align: center;
-  color: #2c3e50;
-  margin-top: 60px;
-}
+  body{
+    margin: 0;
+    padding: 0;
+    font-family: 'Open Sans', sans-serif;
+  }
+  #container{
+    display: flex;
+    flex-wrap: nowrap;
+    margin: 0;
+    padding: 0;
+  }
+  #categories{
+    width: 20vw;
+    height: 100vh;
+    background: white;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    border-right: solid 1px rgb(229 229 229 / 52%);
+  }
+  .titles{    
+    width: 100%;
+    text-align: center;
+    background: black;
+    color: white;
+  }
+  .list{
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    width: 100%;
+  }
+  .list_item{
+    padding: 1.25rem;
+    transition: .3s;
+    box-shadow: 0px 5px 5px 0px rgba(212,212,212,0.75);
+    -webkit-box-shadow: 0px 5px 5px 0px rgba(212,212,212,0.75);
+    -moz-box-shadow: 0px 5px 5px 0px rgba(212,212,212,0.75);
+    font-weight: 600;
+  }
+  .list_item:hover, .list_item.active{
+    background: grey;
+    color: white;
+    cursor: pointer;
+  }
+  .list_item:active, .list_item.active:active{
+    background: rgb(80, 80, 80);
+  }
+  #pos_body{
+    width: 55vw;
+    height: 100vh;
+    background: white;
+    border-right: solid 1px rgb(229 229 229 / 52%);
+  }
+  #key_body{
+    padding: 1rem;
+    display: inline-block;
+  }
+  .pos_key{
+    background: white;
+    box-shadow: 0px 10px 5px 0px rgba(212,212,212,0.75);
+    -webkit-box-shadow: 0px 10px 5px 0px rgba(212,212,212,0.75);
+    -moz-box-shadow: 0px 10px 5px 0px rgba(212,212,212,0.75);
+    border-radius: 3px;
+    width: 200px;
+    height: 200px;
+    margin: 10px;
+    display: inline-block;
+    transition: .3s;
+  }
+  .pos_key:hover{
+    box-shadow: 0px 5px 5px 0px rgba(212,212,212,0.75);
+    -webkit-box-shadow: 0px 5px 5px 0px rgba(212,212,212,0.75);
+    -moz-box-shadow: 0px 5px 5px 0px rgba(212,212,212,0.75);
+    opacity: .8;
+    cursor: pointer;
+  }
+  .key_image_holder{
+    border-top-left-radius: 3px;
+    border-top-right-radius: 3px;
+    height: 150px;
+    overflow: hidden;
+  }
+  .key_image{
+    transition:.3s;
+    width: auto;
+    min-width: 100%;
+    height: 100%;
+  }
+  .pos_key:hover .key_image{
+    transform: scale(1.1);
+  }
+  .key_description{
+    border-top: 1px solid rgba(212,212,212,0.75);
+    text-align: center;
+  }
+  .key_body_nothing{
+    display: block;
+    margin: 0 auto;
+  }
+  .nothing_image{
+    width: 100%;
+    max-width: 250px;
+    display: block;
+    margin: 0 auto;
+    margin-top:25%;
+    filter: none;
+    -webkit-filter: grayscale(100%);
+    -moz-filter:    grayscale(100%);
+    -ms-filter:     grayscale(100%);
+    -o-filter:      grayscale(100%);
+    opacity: .3;
+  }
+  #receipt_body{
+    width: 25vw;
+    height: 100vh;
+    background: white;
+    display: flex;
+    flex-direction: column;
+    border-right: solid 1px rgb(229 229 229 / 52%);
+  }
+  .receipt{
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    width: 100%;
+    border-bottom:solid 1px rgb(229 229 229 / 52%);
+    min-height: 55px;
+  }
+  .receipt > .line_item:nth-child(even){
+   background: grey;
+   color: white;
+  }
+  .line_item{
+    padding: 1.25rem;
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+    font-weight: 600;
+  }
+  .charge_btn{
+    margin-top: auto;
+    color: white;
+    background: rgb(41, 131, 248);
+    text-align: center;
+  }
+  .charge_btn:hover{
+    opacity: .8;
+    transition: .3s;
+    cursor: pointer;
+  }
 </style>
